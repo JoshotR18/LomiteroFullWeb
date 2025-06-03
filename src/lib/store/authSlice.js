@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase';
 import { hashPassword } from '@/lib/authUtils';
 
-export const authSlice = (set, get) => ({
+export const createAuthSlice = (set, get) => ({
   isAuthenticated: false,
   user: null,
   role: null,

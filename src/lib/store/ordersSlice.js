@@ -55,7 +55,7 @@ const createSaleFromOrder = async (order) => {
 };
 
 
-export const ordersSlice = (set, get) => ({
+export const createOrdersSlice = (set, get) => ({
   orders: [],
   isLoadingOrders: false, 
   ordersError: null,
