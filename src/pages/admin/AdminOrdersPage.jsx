@@ -21,10 +21,14 @@ const AdminOrdersPage = () => {
     fetchOrders: storeFetchOrders, 
     updateOrderStatus: storeUpdateOrderStatus, 
     deleteOrder: storeDeleteOrder, 
-    isLoadingOrders, 
+    isLoadingOrders,
+    subscribeToOrderChanges, // Added
+    unsubscribeFromOrderChanges // Added
   } = useStore(state => ({
     orders: state.orders,
     fetchOrders: state.fetchOrders,
+    subscribeToOrderChanges: state.subscribeToOrderChanges, // Added
+    unsubscribeFromOrderChanges: state.unsubscribeFromOrderChanges, // Added
     updateOrderStatus: state.updateOrderStatus,
     deleteOrder: state.deleteOrder,
     isLoadingOrders: state.isLoadingOrders,
@@ -37,6 +41,18 @@ const AdminOrdersPage = () => {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  // Effect for real-time order subscriptions for Admin (all orders)
+  useEffect(() => {
+    console.log('AdminOrdersPage: Subscribing to all order changes.');
+    // Passing null for branchId to subscribe to all orders
+    subscribeToOrderChanges(null);
+
+    return () => {
+      console.log('AdminOrdersPage: Unsubscribing from order changes.');
+      unsubscribeFromOrderChanges();
+    };
+  }, [subscribeToOrderChanges, unsubscribeFromOrderChanges]); // subscribe/unsubscribe are stable references from Zustand
 
   const handleStatusChange = async (orderId, newStatus) => {
     setIsUpdatingStatus(prev => ({ ...prev, [orderId]: true }));

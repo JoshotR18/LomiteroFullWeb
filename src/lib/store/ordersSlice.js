@@ -59,6 +59,129 @@ export const ordersSlice = (set, get) => ({
   orders: [],
   isLoadingOrders: false, 
   ordersError: null,
+  orderSubscription: null,
+
+  subscribeToOrderChanges: (branchId = null) => {
+    if (get().orderSubscription) {
+      console.log('ordersSlice: Existing subscription found. May need to handle branch changes or resubscribe.');
+      // For now, we don't automatically unsubscribe/resubscribe if branchId changes.
+      // This could be a point of enhancement if needed.
+      // return;
+    }
+
+    const channel = supabase
+      .channel('public:orders')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'orders',
+          filter: branchId ? `branch_id=eq.${branchId}` : undefined
+        },
+        async (payload) => {
+          console.log('ordersSlice: Real-time change received!', payload);
+          const currentOrders = get().orders;
+
+          const fetchFullOrderDetails = async (orderId) => {
+            const { data: fullOrder, error } = await supabase
+              .from('orders')
+              .select(`
+                *,
+                customer_name,
+                users ( id, name, email ),
+                branches ( id, name ),
+                order_items (
+                  *,
+                  add_ons,
+                  products ( id, name, image_url, stock_control_type )
+                )
+              `)
+              .eq('id', orderId)
+              .single();
+            if (error) {
+              console.error('ordersSlice: Error fetching full order details for real-time update:', error);
+              toast({ variant: "destructive", title: "Error de Datos", description: "No se pudieron cargar detalles completos del pedido en tiempo real."});
+              return null;
+            }
+            return fullOrder;
+          };
+
+          if (payload.eventType === 'INSERT') {
+            const newOrderBasic = payload.new;
+            const newOrderDetails = await fetchFullOrderDetails(newOrderBasic.id);
+            if (newOrderDetails && !currentOrders.find(o => o.id === newOrderDetails.id)) {
+              set({ orders: [newOrderDetails, ...currentOrders] });
+              toast({
+                title: "Nuevo Pedido Recibido!",
+                description: `Pedido #${newOrderDetails.id.substring(0,5)} para ${newOrderDetails.customer_name || newOrderDetails.users?.name || 'Cliente'}.`,
+                className: "bg-blue-500 text-white"
+              });
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedOrderBasic = payload.new;
+            const updatedOrderDetails = await fetchFullOrderDetails(updatedOrderBasic.id);
+            if (updatedOrderDetails) {
+              const existingOrder = currentOrders.find(o => o.id === updatedOrderDetails.id);
+              set({
+                orders: currentOrders.map(o =>
+                  o.id === updatedOrderDetails.id ? { ...o, ...updatedOrderDetails } : o
+                ),
+              });
+              if (existingOrder && existingOrder.status !== updatedOrderDetails.status) {
+                toast({
+                  title: "Pedido Actualizado",
+                  description: `El estado del pedido #${updatedOrderDetails.id.substring(0,5)} ha cambiado a ${updatedOrderDetails.status}.`
+                });
+              } else if (existingOrder) { // It's an update, but maybe not status
+                 toast({
+                  title: "Pedido Modificado",
+                  description: `El pedido #${updatedOrderDetails.id.substring(0,5)} ha sido modificado.`
+                });
+              }
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const deletedOrder = payload.old;
+            if (deletedOrder && deletedOrder.id) {
+                 set({ orders: currentOrders.filter(o => o.id !== deletedOrder.id) });
+                 toast({
+                    title: "Pedido Eliminado",
+                    description: `El pedido #${deletedOrder.id.substring(0,5)} ha sido eliminado.`
+                });
+            }
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('ordersSlice: Successfully subscribed to order changes!');
+        }
+        if (status === 'SUBSCRIPTION_ERROR') {
+          console.error('ordersSlice: Supabase subscription error:', err);
+          set({ ordersError: 'Error en la suscripción en tiempo real.' });
+          toast({ variant: "destructive", title: "Error de Conexión", description: "No se pudo conectar para actualizaciones en tiempo real." });
+        }
+      });
+
+    set({ orderSubscription: channel });
+  },
+
+  unsubscribeFromOrderChanges: async () => {
+    const sub = get().orderSubscription;
+    if (sub) {
+      try {
+        await supabase.removeChannel(sub);
+        console.log('ordersSlice: Unsubscribed from order changes.');
+        set({ orderSubscription: null });
+      } catch (error) {
+        console.error('ordersSlice: Error unsubscribing', error);
+        // Optionally, inform the user or set an error state
+        toast({ variant: "destructive", title: "Error de Desuscripción", description: "No se pudo detener las actualizaciones en tiempo real." });
+      }
+    } else {
+      console.log('ordersSlice: No active subscription to unsubscribe from.');
+    }
+  },
 
   fetchOrders: async (branchId = null) => {
     set({ isLoadingOrders: true, ordersError: null });
@@ -327,4 +450,5 @@ export const ordersSlice = (set, get) => ({
       return { success: false, error: e.message };
     }
   },
+  // createOrder, updateOrderStatus, deleteOrder remain here
 });

@@ -193,11 +193,14 @@ const StaffPage = () => {
     products, fetchProducts, categories, fetchCategories, 
     branches, fetchBranches, user, createOrder, updateOrderStatus, logout,
     orders, fetchOrders: storeFetchOrders,
+    subscribeToOrderChanges, unsubscribeFromOrderChanges,
     isLoadingProducts, productsError, isLoadingCategories, categoriesError,
     isLoadingBranches, branchesError, isLoadingOrders, ordersError: storeOrdersError
   } = useStore(state => ({
-    products: state.products || [], 
+    products: state.products || [],
     fetchProducts: state.fetchProducts,
+    subscribeToOrderChanges: state.subscribeToOrderChanges,
+    unsubscribeFromOrderChanges: state.unsubscribeFromOrderChanges,
     categories: state.categories || [], 
     fetchCategories: state.fetchCategories,
     branches: state.branches || [], 
@@ -277,6 +280,19 @@ const StaffPage = () => {
       storeFetchOrders(selectedBranch.id);
     }
   }, [selectedBranch, storeFetchOrders]);
+
+  // Effect for real-time order subscriptions
+  useEffect(() => {
+    if (selectedBranch?.id) {
+      console.log(`StaffPage: Subscribing to order changes for branch ${selectedBranch.id}`);
+      subscribeToOrderChanges(selectedBranch.id);
+
+      return () => {
+        console.log(`StaffPage: Unsubscribing from order changes for branch ${selectedBranch.id}`);
+        unsubscribeFromOrderChanges();
+      };
+    }
+  }, [selectedBranch, subscribeToOrderChanges, unsubscribeFromOrderChanges]);
 
   const handleSelectBranch = async (branch) => {
     setSelectedBranch(branch);

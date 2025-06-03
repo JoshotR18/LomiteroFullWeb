@@ -8,6 +8,7 @@ import { formatGuaranies } from '@/lib/store';
 import useStore from '@/lib/store';
 import { Clock, CheckCircle2, ChefHat, Package, XCircle, ShoppingBag, Loader2 } from 'lucide-react';
 
+// Note: subscribeToOrderChanges and unsubscribeFromOrderChanges will be pulled from useStore
 const OrderStatusIcon = ({ status }) => {
   switch (status) {
     case 'Pendiente':
@@ -90,20 +91,51 @@ const OrderCard = ({ order }) => {
 };
 
 const OrdersPage = () => {
-  const { orders, user, fetchOrders, isLoading, setIsLoading } = useStore();
+  const {
+    orders,
+    user,
+    fetchOrders,
+    isLoading,
+    setIsLoading,
+    subscribeToOrderChanges, // Added
+    unsubscribeFromOrderChanges // Added
+  } = useStore(state => ({
+    orders: state.orders,
+    user: state.user,
+    fetchOrders: state.fetchOrders,
+    isLoading: state.isLoadingOrders, // Assuming isLoadingOrders is the correct state property
+    setIsLoading: state.setIsLoadingOrders, // Assuming setIsLoadingOrders is the correct setter
+    subscribeToOrderChanges: state.subscribeToOrderChanges,
+    unsubscribeFromOrderChanges: state.unsubscribeFromOrderChanges,
+  }));
   const [activeTab, setActiveTab] = useState("pending");
 
   const loadUserOrders = useCallback(async () => {
     if (user?.id) {
-      setIsLoading(true);
+      // fetchOrders itself sets isLoading to true and false.
+      // No need to call setIsLoading here if fetchOrders handles it.
       await fetchOrders(); 
-      setIsLoading(false);
     }
-  }, [user, fetchOrders, setIsLoading]);
+  }, [user, fetchOrders]);
 
   useEffect(() => {
     loadUserOrders();
   }, [loadUserOrders]);
+
+  // Effect for real-time order subscriptions for the logged-in user
+  useEffect(() => {
+    if (user?.id) {
+      console.log(`Client/OrdersPage: Subscribing to order changes for user ${user.id}`);
+      // Passing null for branchId, assuming RLS handles user-specific orders
+      // or the subscription in the slice is designed to fetch all orders for the user.
+      subscribeToOrderChanges(null);
+
+      return () => {
+        console.log(`Client/OrdersPage: Unsubscribing from order changes for user ${user.id}`);
+        unsubscribeFromOrderChanges();
+      };
+    }
+  }, [user, subscribeToOrderChanges, unsubscribeFromOrderChanges]);
   
   const userOrders = Array.isArray(orders) ? orders.filter(order => order.user_id === user?.id) : [];
   
